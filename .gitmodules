@@ -1,0 +1,3 @@
+[submodule "BackgroundMattingV2"]
+	path = BackgroundMattingV2
+	url = https://github.com/PeterL1n/BackgroundMattingV2.git
