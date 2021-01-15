@@ -3,7 +3,7 @@ import sys
 MIN_PYTHON = (3, 7)
 assert sys.version_info >= MIN_PYTHON, f"requires Python {'.'.join([str(n) for n in MIN_PYTHON])} or newer"
 
-from os import listdir, getcwd, system, replace
+from os import listdir, getcwd, system, replace, walk
 from os.path import isfile, isdir, join
 import re
 from shutil import rmtree
@@ -33,69 +33,66 @@ inputDir = sys.argv[1]
 if not isdir(inputDir):
     print(f'{inputDir} is not a directory')
 
-files = listdir(inputDir)
-
-videoFiles = []
-
-for file in files:
-    fileMatch = re.match(r"(?P<base>.*)\.(?P<ext>mp4|mov|avi|mkv)$", file)
-    if fileMatch:
-        base = fileMatch.group('base')
-        ext = fileMatch.group('ext')
-        print(f'Found video file {base}.{ext}')
-        bgFile = f'{base}.png'
-        if isfile(join(inputDir, bgFile)):
-            videoFiles.append({
-                'video': file,
-                'bg': bgFile,
-                'base': base
-            })
-        else:
-            print(f'Missing background image \'{bgFile}\', skipping this video!')
-
-totalFiles = len(videoFiles)
-currentFile = 0
 outputBase = join(inputDir, '__tmp')
-for videoDict in videoFiles:
-    fileNumber = currentFile + 1;
-    print(f'Processing file {fileNumber} of {totalFiles}, {videoDict["base"]}')
-    videoFile = join(inputDir, videoDict['video'])
-    bgFile = join(inputDir, videoDict['bg'])
+if isdir(outputBase):
+    print(f'Cleaning temporary output directory: {outputBase}')
+    rmtree(outputBase)
 
-    outputDir = join(outputBase, videoDict['base'])
-    outputVideo = join(inputDir, f'{videoDict["base"]}_matte.mp4')
+for currentDir, dirnames, filenames in walk(inputDir):
+    print (f'Processing directory: {currentDir}')
 
-    if isfile(outputVideo):
-        print(f'Output file {outputVideo} exists, skipping.')
-        continue
+    for filename in filenames:
+        fileMatch = re.match(r"(?P<base>.*)\.(?P<ext>mp4|mov|avi|mkv)$", filename)
 
-    print(f'Outputting to temporary dir: {outputDir}')
+        if fileMatch:
+            base = fileMatch.group('base')
+            ext = fileMatch.group('ext')
+            print(f'Found video file {base}.{ext}')
+            videoFile = join(currentDir, filename)
+            bgFile = join(currentDir, f'{base}.png')
+            outputMatteVideo = join(currentDir, f'{base}_matte.mp4')
 
-    if isdir(outputDir):
-        print(f'Cleaning temporary output directory: {outputDir}')
-        rmtree(outputDir)
+            if not isfile(bgFile):
+                print(f'Missing background image \'{bgFile}\', skipping this video!')
+                continue
 
-    print("Running inference script", flush=True)
-    proc = Popen([
-        'python', inferenceScript,
-        '--model-type', 'mattingrefine',
-        '--model-backbone', 'resnet50',
-        '--model-checkpoint', modelPath,
-        '--model-refine-mode', 'full',
-        '--video-src', videoFile,
-        '--video-bgr', bgFile,
-        '--output-dir', outputDir,
-        '--output-types', 'pha',
-        '--output-format', 'video'])
+            if isfile(outputMatteVideo):
+                print(f'Output file {outputMatteVideo} exists, skipping.')
+                continue
 
-    proc.wait()
+            outputDir = join(outputBase, base)
+            if isdir(outputDir):
+                print(f'Cleaning temporary output directory: {outputDir}')
+                rmtree(outputDir)
 
-    tmpVideo = join(outputDir, 'pha.mp4')
+            print(f'Outputting to temporary dir: {outputDir}')
+            print("Running inference script", flush=True)
+            proc = Popen([
+                'python', inferenceScript,
+                '--model-type', 'mattingrefine',
+                '--model-backbone', 'resnet50',
+                '--model-checkpoint', modelPath,
+                '--model-refine-mode', 'full',
+                '--video-src', videoFile,
+                '--video-bgr', bgFile,
+                '--output-dir', outputDir,
+                '--output-types', 'pha',
+                '--output-format', 'video'])
 
-    if isfile(tmpVideo):
-        replace(tmpVideo, outputVideo)
+            proc.wait()
 
-    currentFile += 1
+            if proc.returncode != 0:
+                print (f'Inference script failed with return code {proc.returncode}')
+
+            tmpVideo = join(outputDir, 'pha.mp4')
+
+            if isfile(tmpVideo):
+                print (f'Copying output file from {tmpVideo} to {outputMatteVideo}')
+                replace(tmpVideo, outputMatteVideo)
+
+            if isdir(outputDir):
+                print(f'Cleaning up temporary output directory: {outputDir}')
+                rmtree(outputDir)
 
 print("Done processing")
 if isdir(outputBase):
