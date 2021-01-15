@@ -63,6 +63,11 @@ for videoDict in videoFiles:
     bgFile = join(inputDir, videoDict['bg'])
 
     outputDir = join(outputBase, videoDict['base'])
+    outputVideo = join(inputDir, f'{videoDict["base"]}_matte.mp4')
+
+    if isfile(outputVideo):
+        print(f'Output file {outputVideo} exists, skipping.')
+        continue
 
     print(f'Outputting to temporary dir: {outputDir}')
 
@@ -70,6 +75,7 @@ for videoDict in videoFiles:
         print(f'Cleaning temporary output directory: {outputDir}')
         rmtree(outputDir)
 
+    print("Running inference script", flush=True)
     proc = Popen([
         'python', inferenceScript,
         '--model-type', 'mattingrefine',
@@ -85,8 +91,6 @@ for videoDict in videoFiles:
     proc.wait()
 
     tmpVideo = join(outputDir, 'pha.mp4')
-    outputVideo = join(inputDir, f'{videoDict["base"]}_mask.mp4')
-
 
     if isfile(tmpVideo):
         replace(tmpVideo, outputVideo)
@@ -94,5 +98,6 @@ for videoDict in videoFiles:
     currentFile += 1
 
 print("Done processing")
-print(f'Cleaning temporary output directory: {outputBase}')
-rmtree(outputBase)
+if isdir(outputBase):
+    print(f'Cleaning temporary output directory: {outputBase}')
+    rmtree(outputBase)
